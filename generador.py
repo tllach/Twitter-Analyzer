@@ -53,66 +53,40 @@ def generate_graph_rt(tweets: list):
         try:
             tweet_rt = tweet.get('retweeted_status')
             if tweet_rt:
-                retweeted_user = tweet['user']['screen_name']
-                retweeting_user = tweet_rt['user']['screen_name']
+                retweeting_user = tweet['user']['screen_name']
+                retweeted_user = tweet_rt['user']['screen_name']
                 G.add_edge(retweeted_user, retweeting_user)
         except (KeyError, TypeError) as e:
             print(f"Error processing tweet: {e}")
-
     nx.write_gexf(G, 'retweet_graph.gexf')
 
-
-def create_retweet_json(tweets: list):
-    rt = [{'username': "", 
-           'receivedRetweets': 0, 
-           'tweets': {}
-        }]
-    
+def create_retweet_json(tweets):
+    retweets = {}
     for tweet in tweets:
-        if tweet.get('retweeted_status'):
-            retweeted_user = tweet.get("user").get("name")
-            retweeting_user = tweet.get("retweeted_status").get("user").get("name")
-            tweet_id = tweet.get("retweeted_status").get("id")
-            isDifferent = False
-            i = -1
-            for retweet in rt:
-                if retweeted_user != retweet['username']:
-                    isDifferent = True
-                    continue
-                isDifferent = False
-                i += 1
-                break
-            
-            if isDifferent:
-                retweets = {'username': None, 
-                'receivedRetweets': 0, 
-                'tweets': {}
+        retweeted_status = tweet.get('retweeted_status')
+        if retweeted_status:
+            retweeting_user = tweet["user"]["screen_name"]
+            retweeted_user = retweeted_status["user"]["name"]
+            tweet_id = retweeted_status["id"]
+
+            if retweeted_user not in retweets:
+                retweets[retweeted_user] = {
+                    'receivedRetweets': 0,
+                    'tweets': {}
                 }
-                retweets['username'] = retweeted_user
-                retweets['receivedRetweets'] = 1
-                retweets['tweets'][f'tweetId: {tweet_id}'] = {'retweetedBy': [retweeting_user]}
-                rt.append(retweets)
+
+            retweet_data = retweets[retweeted_user]
+            if tweet_id not in retweet_data['tweets']:
+                retweet_data['tweets'][f'tweetId: {tweet_id}'] = {'retweetedBy': [retweeting_user]}
+                retweet_data['receivedRetweets'] += 1
             else:
-                isNotThere = True
-                # Verifica si tweet_id ya está presente
-                rta = rt[0]
-                for rt_tweetid in rta['tweets']:
-                    if tweet_id == rt_tweetid[9:]:
-                        # Si tweet_id ya está presente, actualiza la lista de retweeted_by
-                        rta['tweets'][rt_tweetid]['retweetedBy'].append(retweeting_user)
-                        rta['receivedRetweets'] += 1
-                        isNotThere = False
-                        break
+                retweet_data['tweets'][f'tweetId: {tweet_id}']['retweetedBy'].append(retweeting_user)
+                retweet_data['receivedRetweets'] += 1
                 
-                if isNotThere:
-                    # Si tweet_id no está presente, se agrega
-                    rta['tweets'][f'tweetId: {tweet_id}'] = {'retweetedBy': [retweeting_user]}
-                    rta['receivedRetweets'] += 1
-    
-    retweets = {"retweets": rt}
-    
-    with open('rt2.json', 'w') as f:
-        json.dump(retweets, f)
+    sorted_retweets = sorted(retweets.items(), key=lambda x: x[1]['receivedRetweets'], reverse=True)
+    result = {"retweets": [{'username': key, **value} for key, value in sorted_retweets]}
+    with open('rt.json', 'w') as f:
+        json.dump(result, f)
 
 def main(argv):
     input_directory = '/data'
