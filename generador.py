@@ -47,6 +47,44 @@ def process_tweets(input_directory: str, start_date, end_date, hashtags: list) -
                             print(f"Error processing tweet: {e}")
     return tweets
 
+def is_valid_tweet(tweet, start_date, end_date, hashtags):
+    created_at = tweet.get('created_at')
+    if not start_date and not end_date and not hashtags:
+        return True
+    if not start_date and not end_date:
+        return hashtags and any(hashtag['text'] in hashtags for hashtag in tweet.get('entities', {}).get('hashtags', []))
+    if created_at:
+        tweet_date = datetime.strptime(created_at, '%a %b %d %H:%M:%S %z %Y').replace(tzinfo=None)
+        date_condition = (start_date and tweet_date >= start_date) or (end_date and tweet_date <= end_date)
+        hashtag_condition = not hashtags or any(hashtag['text'] in hashtags for hashtag in tweet.get('entities', {}).get('hashtags', []))
+        return date_condition and hashtag_condition
+    return False
+
+def process_directory(directory, start_date, end_date, hashtags, tweets):
+    for root, dirs, files in os.walk(directory):
+        for subdir in dirs:
+            new_path = os.path.join(root, subdir)
+            process_directory(new_path, start_date, end_date, hashtags, tweets)
+        for file in files:
+            if file.endswith('.bz2'):
+                process_bz2_file(os.path.join(root, file), start_date, end_date, hashtags, tweets)
+
+def process_bz2_file(file_path, start_date, end_date, hashtags, tweets):
+    with bz2.BZ2File(file_path, 'rb') as f:
+        for line in f:
+            try:
+                line = line.decode('utf-8')
+                tweet = json.loads(line)
+                if is_valid_tweet(tweet, start_date, end_date, hashtags):
+                    tweets.append(tweet)
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                print(f"Error processing tweet: {e}")
+
+def process_tweets2(input_directory: str, start_date, end_date, hashtags: list) -> list:
+    tweets = []
+    process_directory(input_directory, start_date, end_date, hashtags, tweets)
+    return tweets
+
 def generate_graph_rt(tweets: list):
     G = nx.DiGraph()
     for tweet in tweets:
@@ -85,7 +123,7 @@ def create_retweet_json(tweets):
                 
     sorted_retweets = sorted(retweets.items(), key=lambda x: x[1]['receivedRetweets'], reverse=True)
     result = {"retweets": [{'username': key, **value} for key, value in sorted_retweets]}
-    with open('rt.json', 'w') as f:
+    with open('rt2.json', 'w') as f:
         json.dump(result, f)
 
 def main(argv):
@@ -128,7 +166,7 @@ def main(argv):
     retweets = {}
     co_retweets = {}
     
-    tweets = process_tweets(input_directory, start_date, end_date, hashtags)
+    tweets = process_tweets2(input_directory, start_date, end_date, hashtags)
     print('tweet procesados: ' + str(len(tweets)))
     for opt, arg in opts:
         if opt == '--grt':
