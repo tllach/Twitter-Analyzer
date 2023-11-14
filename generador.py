@@ -61,9 +61,58 @@ def generate_graph_rt(tweets: list):
 
     nx.write_gexf(G, 'retweet_graph.gexf')
 
-def generate_json_rt():
-    pass
 
+def create_retweet_json(tweets: list):
+    rt = [{'username': "", 
+           'receivedRetweets': 0, 
+           'tweets': {}
+        }]
+    
+    for tweet in tweets:
+        if tweet.get('retweeted_status'):
+            retweeted_user = tweet.get("user").get("name")
+            retweeting_user = tweet.get("retweeted_status").get("user").get("name")
+            tweet_id = tweet.get("retweeted_status").get("id")
+            isDifferent = False
+            i = -1
+            for retweet in rt:
+                if retweeted_user != retweet['username']:
+                    isDifferent = True
+                    continue
+                isDifferent = False
+                i += 1
+                break
+            
+            if isDifferent:
+                retweets = {'username': None, 
+                'receivedRetweets': 0, 
+                'tweets': {}
+                }
+                retweets['username'] = retweeted_user
+                retweets['receivedRetweets'] = 1
+                retweets['tweets'][f'tweetId: {tweet_id}'] = {'retweetedBy': [retweeting_user]}
+                rt.append(retweets)
+            else:
+                isNotThere = True
+                # Verifica si tweet_id ya está presente
+                rta = rt[0]
+                for rt_tweetid in rta['tweets']:
+                    if tweet_id == rt_tweetid[9:]:
+                        # Si tweet_id ya está presente, actualiza la lista de retweeted_by
+                        rta['tweets'][rt_tweetid]['retweetedBy'].append(retweeting_user)
+                        rta['receivedRetweets'] += 1
+                        isNotThere = False
+                        break
+                
+                if isNotThere:
+                    # Si tweet_id no está presente, se agrega
+                    rta['tweets'][f'tweetId: {tweet_id}'] = {'retweetedBy': [retweeting_user]}
+                    rta['receivedRetweets'] += 1
+    
+    retweets = {"retweets": rt}
+    
+    with open('rt2.json', 'w') as f:
+        json.dump(retweets, f)
 
 def main(argv):
     input_directory = '/data'
@@ -75,7 +124,6 @@ def main(argv):
     args = argv.split()
     try:
         opts, args = getopt.getopt(args, "d:fi:ff:h:", ["grt", "jrt", "gm", "jm", "grct", "jrct"])
-        print(opts)
     except getopt.GetoptError:
         print("generador.py -d <path relativo> -fi <fecha inicial> -ff <fecha final> -h <nombre de archivo> [--grt] [--jrt] [--gm] [--jm] [--gcrt] [--jcrt]")
         sys.exit(2)
@@ -86,18 +134,18 @@ def main(argv):
             #arg = correct_filepath(arg)
             input_directory = arg
         #Esto para comprobar si es -fi o -ff
-        elif opt == '-f' and arg == "":
+        if opt == '-f' and arg == "":
             #entrará dos veces si es -ff
             if flag:
                 end_date = datetime.strptime(arg, "%d-%m-%y")
                 print("end_date: " + str(end_date))
             flag = True
-        elif opt == '-i' and flag:
+        if opt == '-i' and flag:
             #entrará si es -fi
             start_date = datetime.strptime(arg, "%d-%m-%y")
             print("start_date: " + str(start_date))
             flag = False
-        elif opt == '-h':
+        if opt == '-h':
             with open(arg, 'r') as file:
                 hashtags = [line.strip() for line in file]
     
@@ -112,7 +160,7 @@ def main(argv):
         if opt == '--grt':
             generate_graph_rt(tweets)
         if opt == '--jrt':
-            generate_json_rt()
+            create_retweet_json(tweets)
         if opt == '--gm':
             pass
             #generate_graph_mention()
@@ -126,4 +174,4 @@ def main(argv):
             pass
             #generate_json_corretweet()
 
-main("-d data/2016/01/06/00/ -fi 06-01-16 --grt")
+main("-d data/2016/01/06/00/ -fi 06-01-16 --jrt")
