@@ -98,15 +98,15 @@ def generate_graph_rt(tweets: list):
             print(f"Error processing tweet: {e}")
     nx.write_gexf(G, 'retweet_graph.gexf')
 
-def create_retweet_json(tweets):
+def create_retweet_json(tweets: list):
     retweets = {}
     for tweet in tweets:
         retweeted_status = tweet.get('retweeted_status')
         if retweeted_status:
             retweeting_user = tweet["user"]["screen_name"]
-            retweeted_user = retweeted_status["user"]["name"]
+            retweeted_user = retweeted_status["user"]["screen_name"]
             tweet_id = retweeted_status["id"]
-
+            tweet_id = f'tweetId: {tweet_id}'
             if retweeted_user not in retweets:
                 retweets[retweeted_user] = {
                     'receivedRetweets': 0,
@@ -115,12 +115,12 @@ def create_retweet_json(tweets):
 
             retweet_data = retweets[retweeted_user]
             if tweet_id not in retweet_data['tweets']:
-                retweet_data['tweets'][f'tweetId: {tweet_id}'] = {'retweetedBy': [retweeting_user]}
+                retweet_data['tweets'][tweet_id] = {'retweetedBy': [retweeting_user]}
                 retweet_data['receivedRetweets'] += 1
             else:
-                retweet_data['tweets'][f'tweetId: {tweet_id}']['retweetedBy'].append(retweeting_user)
+                retweet_data['tweets'][tweet_id]['retweetedBy'].append(retweeting_user)
                 retweet_data['receivedRetweets'] += 1
-                
+            
     sorted_retweets = sorted(retweets.items(), key=lambda x: x[1]['receivedRetweets'], reverse=True)
     result = {"retweets": [{'username': key, **value} for key, value in sorted_retweets]}
     with open('rt2.json', 'w') as f:
