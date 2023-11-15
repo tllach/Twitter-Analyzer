@@ -118,13 +118,18 @@ def generate_json_mention(tweets: list):
             for user_mention in tweet['entities']['user_mentions']:
                 mentioned_user = user_mention['screen_name']
                 mention_data = {'mentionBy': mentioning_user, 'tweets': [tweet_id]}
-
+                flag = True
                 mentions_dict[mentioned_user]['receivedMentions'] += 1
-                mentions_dict[mentioned_user]['mentions'].append(mention_data)
+                for mention_m in mentions_dict[mentioned_user]['mentions']:
+                    if mention_m['mentionBy'] == mentioning_user:
+                        mention_m['tweets'].append(tweet_id)
+                        flag = False
+                        break
+                if flag: mentions_dict[mentioned_user]['mentions'].append(mention_data)
                 mentions_dict[mentioned_user]['username'] = mentioned_user
 
     # Organizar la lista de menciones por 'receivedMentions' de mayor a menor
-    sorted_mentions = sorted(mentions_dict.values(), key=lambda x: x['receivedMentions'], reverse=True)
+    sorted_mentions = {'mentions':sorted(mentions_dict.values(), key=lambda x: x['receivedMentions'], reverse=True)}
 
     with open('mención.json', 'w') as f:
         json.dump(sorted_mentions, f, indent=4)
