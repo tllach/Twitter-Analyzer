@@ -1,6 +1,5 @@
 import os
 import networkx as nx 
-import glob 
 import json 
 import shutil,bz2,getopt,sys
 from collections import defaultdict
@@ -123,51 +122,47 @@ def create_retweet_json(tweets: list):
             
     sorted_retweets = sorted(retweets.items(), key=lambda x: x[1]['receivedRetweets'], reverse=True)
     result = {"retweets": [{'username': key, **value} for key, value in sorted_retweets]}
-    with open('rt2.json', 'w') as f:
-        json.dump(result, f)
+    with open('rt8.json', 'w') as f:
+        json.dump(result, f, indent=4)
 
 def main(argv):
     input_directory = '/data'
     start_date = False
     end_date = False
     hashtags = []
-    output_directory = 'app'
     
     args = argv.split()
-    try:
-        opts, args = getopt.getopt(args, "d:fi:ff:h:", ["grt", "jrt", "gm", "jm", "grct", "jrct"])
-    except getopt.GetoptError:
-        print("generador.py -d <path relativo> -fi <fecha inicial> -ff <fecha final> -h <nombre de archivo> [--grt] [--jrt] [--gm] [--jm] [--gcrt] [--jcrt]")
-        sys.exit(2)
+    opts = []
     
-    flag = False
+    i = 0
+    while i < len(args):
+        argumento = args[i]
+        valor = args[i + 1] if i + 1 < len(args) else ''
+        if argumento.startswith('--'):
+            opts.append((argumento, ''))
+        else:
+            if argumento.startswith('-') and not valor.startswith('-'):
+                opts.append((argumento, valor))
+                i += 2
+                continue
+            elif argumento.startswith('-') and valor.startswith('-') and not valor.startswith('--'):
+                pass
+        i += 1
+    
     for opt, arg in opts:
         if opt == '-d':
-            #arg = correct_filepath(arg)
             input_directory = arg
-        #Esto para comprobar si es -fi o -ff
-        if opt == '-f' and arg == "":
-            #entrará dos veces si es -ff
-            if flag:
-                end_date = datetime.strptime(arg, "%d-%m-%y")
-                print("end_date: " + str(end_date))
-            flag = True
-        if opt == '-i' and flag:
-            #entrará si es -fi
+        if opt == '-ff':
+            end_date = datetime.strptime(arg, "%d-%m-%y")
+        if opt == '-fi':
             start_date = datetime.strptime(arg, "%d-%m-%y")
-            print("start_date: " + str(start_date))
-            flag = False
         if opt == '-h':
             with open(arg, 'r') as file:
                 hashtags = [line.strip() for line in file]
     
-    authors = {}
-    mentions = {}
-    retweets = {}
-    co_retweets = {}
-    
     tweets = process_tweets2(input_directory, start_date, end_date, hashtags)
     print('tweet procesados: ' + str(len(tweets)))
+    
     for opt, arg in opts:
         if opt == '--grt':
             generate_graph_rt(tweets)
@@ -186,4 +181,4 @@ def main(argv):
             pass
             #generate_json_corretweet()
 
-main("-d data/2016/01/06/00/ -fi 06-01-16 --jrt")
+main("-d  data/2016/01/06/00 -fi 06-01-16 --jrt --grt")
