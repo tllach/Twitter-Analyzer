@@ -125,6 +125,17 @@ def create_retweet_json(tweets: list):
     with open('rt8.json', 'w') as f:
         json.dump(result, f, indent=4)
 
+def generate_graph_mention(tweets: list):
+    G = nx.DiGraph()
+    for tweet in tweets:
+        if 'entities' in tweet and 'user_mentions' in tweet['entities']:
+            tweeting_user = tweet['user']['screen_name']
+            for mention in tweet['entities']['user_mentions']:
+                mentioned_user = mention['screen_name']
+                G.add_edge(tweeting_user, mentioned_user)
+    return G
+
+
 def main(argv):
     input_directory = '/data'
     start_date = False
@@ -169,8 +180,7 @@ def main(argv):
         if opt == '--jrt':
             create_retweet_json(tweets)
         if opt == '--gm':
-            pass
-            #generate_graph_mention()
+            generate_graph_mention(tweets)
         if opt == '--jm':
             pass
             #generate_json_mention()
