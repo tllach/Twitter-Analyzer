@@ -3,11 +3,10 @@ import networkx as nx
 import json 
 import time
 from itertools import combinations
-import shutil,bz2,getopt,sys
+import bz2,sys
 from collections import defaultdict, OrderedDict
 import bz2
 from datetime import datetime
-import graphlib
 
 
 def correct_filepath(path: str):
