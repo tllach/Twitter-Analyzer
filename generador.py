@@ -1,4 +1,5 @@
 import os
+import glob
 import networkx as nx 
 import json 
 import time
@@ -22,18 +23,13 @@ def is_valid_tweet(tweet, start_date, end_date, hashtags):
     if created_at:
         tweet_date = datetime.strptime(created_at, '%a %b %d %H:%M:%S %z %Y').replace(tzinfo=None)
         date_condition = (start_date and tweet_date >= start_date) or (end_date and tweet_date <= end_date)
-        hashtag_condition = not hashtags or any(hashtag['text'] in hashtags for hashtag in tweet.get('entities', {}).get('hashtags', []))
+        hashtag_condition = not hashtags or any(hashtag['text'].lower() in hashtags for hashtag in tweet.get('entities', {}).get('hashtags', []))
         return date_condition and hashtag_condition
     return False
 
 def process_directory(directory, start_date, end_date, hashtags, tweets):
-    for root, dirs, files in os.walk(directory):
-        for subdir in dirs:
-            new_path = os.path.join(root, subdir)
-            process_directory(new_path, start_date, end_date, hashtags, tweets)
-        for file in files:
-            if file.endswith('.bz2'):
-                process_bz2_file(os.path.join(root, file), start_date, end_date, hashtags, tweets)
+    for file_path in glob.iglob(f"{directory}/**/*.json.bz2", recursive=True):
+        process_bz2_file(file_path, start_date, end_date, hashtags, tweets)
 
 def process_bz2_file(file_path, start_date, end_date, hashtags, tweets):
     with bz2.BZ2File(file_path, 'rb') as f:
