@@ -93,8 +93,8 @@ def create_retweet_json(tweets: list):
             
     sorted_retweets = sorted(retweets.items(), key=lambda x: x[1]['receivedRetweets'], reverse=True)
     result = {"retweets": [{'username': key, **value} for key, value in sorted_retweets]}
-    with open('rt.json', 'w') as f:
-        json.dump(result, f, indent=4)
+    
+    return result
 
 def generate_graph_mention(tweets: list):
     G = nx.DiGraph()
@@ -134,6 +134,91 @@ def generate_json_mention(tweets: list):
     with open('mención.json', 'w') as f:
         json.dump(sorted_mentions, f, indent=4)
 
+def generate_graph_corretweet(tweets: list):
+    pass
+
+def pasa():
+    new_json = []
+    retweet_data = []
+    author1 = retweet_data["username"]
+    retweeters = set()
+
+    for tweet_id, tweet_info in retweet_data["tweets"].items():
+        retweeters.update(tweet_info["retweetedBy"])
+
+        coretweet_entry = {
+            "authors": {"u1": author1, "u2": None},
+            "totalCoretweets": 0,
+            "retweeters": list(retweeters)
+        }
+
+        # Verificar si hay una relación entre usuarios de retweets y actualizar la entrada
+        for other_retweet_data in tweets["retweets"]:
+            if other_retweet_data["username"] != author1:
+                common_retweeters = set(retweeters).intersection(
+                    user for tweet in other_retweet_data["tweets"].values() for user in tweet["retweetedBy"]
+                )
+
+            if common_retweeters:
+                coretweet_entry["authors"]["u2"] = other_retweet_data["username"]
+                coretweet_entry["totalCoretweets"] += 1
+
+
+        new_json["coretweets"].append(coretweet_entry)
+
+def generate_json_corretweet(tweets: list):
+    json_co = []
+    
+    rtweeters = {}
+    for retweet_data in tweets["retweets"]:
+        retweet_users = []
+        for tweet_info in retweet_data["tweets"].values():
+            retweet_users.extend(tweet_info["retweetedBy"])
+        
+        rtweeters[retweet_data["username"]] = retweet_users
+    
+    i = 0
+    for username, lst_user in rtweeters.items():
+        j = 0
+        for username2 , lst_user2 in rtweeters.items():
+            if i != j:
+                # Encuentra la intersección de las dos listas
+                elementos_comunes = set(lst_user) & set(lst_user2)
+                lista_resultante = list(elementos_comunes)
+                if elementos_comunes:
+                    flag = True
+                    for cort in json_co:
+                        if (cort['authors']['u1'] == username or cort['authors']['u1'] == username2) and (cort['authors']['u2'] == username or cort['authors']['u2'] == username2):
+                            set1 = set(cort['retweeters'])
+                            set2 = set(lista_resultante)
+                            diferencia_lista1 = list(set1 - set2)
+                            diferencia_lista2 = list(set2 - set1)
+                            interseccion = list(set1 & set2)
+
+                            # Agregar los elementos diferentes a una nueva lista
+                            nueva_lista = diferencia_lista1 + interseccion + diferencia_lista2
+                            cort['totalCoretweets'] = len(nueva_lista)
+                            cort['retweeters'] = nueva_lista
+                            flag = False
+                            break
+                    if flag:
+                        dic_co = {
+                            "authors":{
+                                'u1': username,
+                                'u2': username2,
+                            },
+                            'totalCoretweets': len(lista_resultante),
+                            'retweeters': lista_resultante
+                        }
+                        json_co.append(dic_co)
+            j += 1
+        i += 1
+    
+    dic = {"coretweets": json_co}
+    
+    
+    with open('corrtw.json', 'w') as f:
+        json.dump(dic, f, indent=4)
 
 def main(argv):
     ti = time.time()
@@ -141,7 +226,7 @@ def main(argv):
     start_date = False
     end_date = False
     hashtags = []
-    
+    retweets = {}
     opts = []
     
     i = 0
@@ -171,23 +256,24 @@ def main(argv):
                 hashtags = [line.strip() for line in file]
     
     tweets = process_tweets(input_directory, start_date, end_date, hashtags)
-    print('tweet procesados: ' + str(len(tweets)))
     
     for opt, arg in opts:
         if opt == '--grt':
             generate_graph_rt(tweets)
         if opt == '--jrt':
-            create_retweet_json(tweets)
+            retweets = create_retweet_json(tweets)
+            with open('rt.json', 'w') as f:
+                json.dump(retweets, f, indent=4)
         if opt == '--gm':
             generate_graph_mention(tweets)
         if opt == '--jm':
             generate_json_mention(tweets)
         if opt == '--gcrt':
-            pass
-            #generate_graph_corretweet()
+            generate_graph_corretweet(tweets)
         if opt == '--jcrt':
-            pass
-            #generate_json_corretweet()
+            if not retweets:
+                retweets = create_retweet_json(tweets)
+            generate_json_corretweet(retweets)
     tf = time.time()
     print(tf - ti)
 
