@@ -5,7 +5,6 @@ import time
 from itertools import combinations
 import bz2,sys
 from collections import defaultdict, OrderedDict
-import bz2
 from datetime import datetime
 
 
