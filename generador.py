@@ -137,34 +137,6 @@ def generate_json_mention(tweets: list):
 def generate_graph_corretweet(tweets: list):
     pass
 
-def pasa():
-    new_json = []
-    retweet_data = []
-    author1 = retweet_data["username"]
-    retweeters = set()
-
-    for tweet_id, tweet_info in retweet_data["tweets"].items():
-        retweeters.update(tweet_info["retweetedBy"])
-
-        coretweet_entry = {
-            "authors": {"u1": author1, "u2": None},
-            "totalCoretweets": 0,
-            "retweeters": list(retweeters)
-        }
-
-        # Verificar si hay una relación entre usuarios de retweets y actualizar la entrada
-        for other_retweet_data in tweets["retweets"]:
-            if other_retweet_data["username"] != author1:
-                common_retweeters = set(retweeters).intersection(
-                    user for tweet in other_retweet_data["tweets"].values() for user in tweet["retweetedBy"]
-                )
-
-            if common_retweeters:
-                coretweet_entry["authors"]["u2"] = other_retweet_data["username"]
-                coretweet_entry["totalCoretweets"] += 1
-
-
-        new_json["coretweets"].append(coretweet_entry)
 
 def generate_json_corretweet(tweets: list):
     json_co = []
@@ -256,7 +228,7 @@ def main(argv):
                 hashtags = [line.strip() for line in file]
     
     tweets = process_tweets(input_directory, start_date, end_date, hashtags)
-    
+
     for opt, arg in opts:
         if opt == '--grt':
             generate_graph_rt(tweets)
