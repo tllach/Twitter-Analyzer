@@ -7,28 +7,31 @@ from itertools import combinations
 import bz2,sys
 from collections import defaultdict, OrderedDict
 from datetime import datetime
-
+from mpi4py import MPI
+import numpy as np
 
 def correct_filepath(path: str):
-    if path.startswith('/') or path.startswith('\\'):
-        path = path[1:]
-    return path.replace('/', '\\').strip()
+    path = os.path.normpath(path)
+    path = path.lstrip(os.sep)
+    return path
 
 def is_valid_tweet(tweet, start_date, end_date, hashtags):
     created_at = tweet.get('created_at')
-    if not start_date and not end_date and not hashtags:
-        return True
-    if not start_date and not end_date and hashtags:
-        return hashtags and any(hashtag['text'] in hashtags for hashtag in tweet.get('entities', {}).get('hashtags', []))
     if created_at:
         tweet_date = datetime.strptime(created_at, '%a %b %d %H:%M:%S %z %Y').replace(tzinfo=None)
-        date_condition = (start_date and tweet_date >= start_date) or (end_date and tweet_date <= end_date)
-        hashtag_condition = not hashtags or any(hashtag['text'].lower() in hashtags for hashtag in tweet.get('entities', {}).get('hashtags', []))
-        return date_condition and hashtag_condition
-    return False
+    else:
+        return not start_date and not end_date and not hashtags
 
-def process_directory(directory, start_date, end_date, hashtags, tweets):
-    for file_path in glob.iglob(f"{directory}/**/*.json.bz2", recursive=True):
+    date_condition = (not start_date or tweet_date >= start_date) and (not end_date or tweet_date <= end_date)
+    hashtag_condition = not hashtags or any(hashtag['text'].lower() in hashtags for hashtag in tweet.get('entities', {}).get('hashtags', []))
+    
+    return date_condition and hashtag_condition
+
+def process_directory(directory, start_date, end_date, hashtags, tweets, rank, size):
+    files = np.array(glob.glob(f"{directory}/**/*.json.bz2", recursive=True))
+    # Divide the files among processes
+    files_to_process = np.array_split(files, size)[rank]
+    for file_path in files_to_process:
         process_bz2_file(file_path, start_date, end_date, hashtags, tweets)
 
 def process_bz2_file(file_path, start_date, end_date, hashtags, tweets):
@@ -43,25 +46,36 @@ def process_bz2_file(file_path, start_date, end_date, hashtags, tweets):
                 print(f"Error processing tweet: {e}")
 
 def process_tweets(input_directory: str, start_date, end_date, hashtags: list) -> list:
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
     tweets = []
     if input_directory.endswith('.bz2'):
-        process_bz2_file(input_directory, start_date, end_date, hashtags, tweets)
+        if rank == 0:  # Only process the file on one process if it's a single file
+            process_bz2_file(input_directory, start_date, end_date, hashtags, tweets)
     else:
-        process_directory(input_directory, start_date, end_date, hashtags, tweets)
-    return tweets
+        process_directory(input_directory, start_date, end_date, hashtags, tweets, rank, size)
+
+    # Gather all tweets to the root process
+    all_tweets = comm.gather(tweets, root=0)
+
+    if rank == 0:
+        # Flatten the list of tweets
+        all_tweets = [tweet for sublist in all_tweets for tweet in sublist]
+        return all_tweets
 
 def generate_graph_rt(tweets: list):
     G = nx.DiGraph()
     for tweet in tweets:
-        try:
-            tweet_rt = tweet.get('retweeted_status')
-            if tweet_rt:
-                retweeting_user = tweet['user']['screen_name']
-                retweeted_user = tweet_rt['user']['screen_name']
+        tweet_rt = tweet.get('retweeted_status')
+        if tweet_rt:
+            retweeting_user = tweet.get('user', {}).get('screen_name')
+            retweeted_user = tweet_rt.get('user', {}).get('screen_name')
+            if retweeting_user and retweeted_user:
                 G.add_edge(retweeted_user, retweeting_user)
-        except (KeyError, TypeError) as e:
-            print(f"Error processing tweet: {e}")
-    nx.write_gexf(G, 'rt.gexf')
+    with open('rt.gexf', 'wb') as f:
+        nx.write_gexf(G, f)
 
 def create_retweet_json(tweets: list):
     retweets = {}
@@ -183,8 +197,11 @@ def generate_json_coretweet(tweets: list):
     return dic
 
 def main(argv):
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    size = comm.Get_size()
     ti = time.time()
-    input_directory = '/data'
+    input_directory = 'llach-diaz-anzola'
     start_date = False
     end_date = False
     hashtags = []
@@ -247,8 +264,10 @@ def main(argv):
                 
             with open('corrtw.json', 'w') as f:
                 json.dump(json_coretweet, f, indent=4)
+    
     tf = time.time()
     print(tf - ti)
 
 if __name__ == "__main__":
     main(sys.argv[1:])
+    
