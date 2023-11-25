@@ -1,4 +1,3 @@
-import os
 import glob
 import networkx as nx 
 import json 
@@ -19,7 +18,7 @@ def is_valid_tweet(tweet, start_date, end_date, hashtags):
     if not start_date and not end_date and not hashtags:
         return True
     if not start_date and not end_date and hashtags:
-        return hashtags and any(hashtag['text'] in hashtags for hashtag in tweet.get('entities', {}).get('hashtags', []))
+        return hashtags and any(hashtag['text'].lower() in hashtags for hashtag in tweet.get('entities', {}).get('hashtags', []))
     if created_at:
         tweet_date = datetime.strptime(created_at, '%a %b %d %H:%M:%S %z %Y').replace(tzinfo=None)
         date_condition = (start_date and tweet_date >= start_date) or (end_date and tweet_date <= end_date)
@@ -184,7 +183,7 @@ def generate_json_coretweet(tweets: list):
 
 def main(argv):
     ti = time.time()
-    input_directory = '/data'
+    input_directory = 'data/'
     start_date = False
     end_date = False
     hashtags = []
@@ -204,7 +203,7 @@ def main(argv):
                 i += 2
                 continue
             elif argumento.startswith('-') and valor.startswith('-') and not valor.startswith('--'):
-                pass
+                opts.append((argumento, ''))
         i += 1
     
     for opt, arg in opts:
@@ -221,30 +220,35 @@ def main(argv):
     tweets = process_tweets(input_directory, start_date, end_date, hashtags)
 
     for opt, arg in opts:
-        if opt == '--grt':
+        if opt == '--grt' or opt == '-grt':
             generate_graph_rt(tweets)
-        if opt == '--jrt':
+        
+        if opt == '--jrt' or opt == '-jrt':
             if not retweets:
                     retweets = create_retweet_json(tweets)
             with open('rt.json', 'w') as f:
                 json.dump(retweets, f, indent=4)
-        if opt == '--gm':
+        
+        if opt == '--gm' or opt == '-gm':
             generate_graph_mention(tweets)
-        if opt == '--jm':
+        
+        if opt == '--jm' or opt == '-jm':
             generate_json_mention(tweets)
-        if opt == '--gcrt':
+        
+        if opt == '--gcrt' or opt == '-gcrt':
             if not json_coretweet:
                 if not retweets:
                     retweets = create_retweet_json(tweets)
                 json_coretweet = generate_json_coretweet(retweets)
             
             generate_graph_corretweet(json_coretweet)
-        if opt == '--jcrt':
+        
+        if opt == '--jcrt' or opt == '-jcrt':
             if not json_coretweet: 
                 if not retweets:
                     retweets = create_retweet_json(tweets)
                 json_coretweet = generate_json_coretweet(retweets)
-                
+            
             with open('corrtw.json', 'w') as f:
                 json.dump(json_coretweet, f, indent=4)
     tf = time.time()
