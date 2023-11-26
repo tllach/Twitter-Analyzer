@@ -183,7 +183,7 @@ def generate_json_coretweet(tweets: list):
 
 def main(argv):
     ti = time.time()
-    input_directory = 'data/'
+    input_directory = 'input/'
     start_date = False
     end_date = False
     hashtags = []
