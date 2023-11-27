@@ -304,55 +304,7 @@ def generate_json_coretweet(tweets: list):
     
     return dic
 
-def generate_json_coretweet_partial(retweet_data):
-    partial_result = {}
-    for user1, user2 in combinations(retweet_data.keys(), 2):
-        retweeters1 = set(retweet_data[user1])
-        retweeters2 = set(retweet_data[user2])
-
-        common_retweeters = retweeters1 & retweeters2
-        total_core_tweets = len(common_retweeters)
-
-        if total_core_tweets > 0:
-            key = (user1, user2)
-            if key in partial_result or (user2, user1) in partial_result:
-                existing_retweeters = set(partial_result.get(key, []))
-                new_retweeters = list(existing_retweeters - common_retweeters) + list(common_retweeters - existing_retweeters)
-                partial_result[key] = {
-                    "authors": {"u1": user1, "u2": user2},
-                    "totalCoretweets": len(new_retweeters),
-                    "retweeters": new_retweeters,
-                }
-            else:
-                partial_result[key] = {
-                    "authors": {"u1": user1, "u2": user2},
-                    "totalCoretweets": total_core_tweets,
-                    "retweeters": list(common_retweeters),
-                }
-    return partial_result
-
-def generate_json_coretweet2(tweets: list):
-    with multiprocessing.Manager() as manager:
-        json_co = manager.dict()
-
-        retweet_data_list = {}
-        for retweet_data in tweets["retweets"]:
-            retweet_users = []
-            for tweet_info in retweet_data["tweets"].values():
-                retweet_users.extend(tweet_info["retweetedBy"])
-            
-            retweet_data_list[retweet_data["username"]] = retweet_users
-
-        with concurrent.futures.ProcessPoolExecutor() as executor:
-            results = list(executor.map(generate_json_coretweet_partial(retweet_data_list), [retweet_data_list]))
-
-        for result in results:
-            json_co.update(result)
-
-    dic = {"coretweets": list(json_co.values())}
-    return dic
-
-def dividir_lista(tweets:list , numProcess: int) -> list:
+def dividir_lista(tweets:list, numProcess: int) -> list:
     list_of_tweets = []
     len_tweets = len(tweets)
     avg = len_tweets // numProcess
@@ -433,19 +385,20 @@ def main(argv):
             if not json_coretweet:
                 if not retweets:
                     retweets = create_retweet_json(tweets)
-                json_coretweet = generate_json_coretweet2(retweets)
+                json_coretweet = generate_json_coretweet(retweets)
             
             json_coretweet = json
             generate_graph_corretweet(json_coretweet)
         
         if opt == '--jcrt' or opt == '-jcrt':
-            if not json_coretweet: 
-                if not retweets:
-                    retweets = create_retweet_json(tweets)
-                json_coretweet = generate_json_coretweet(retweets)
-            
-            with open('corrtwp.json', 'w') as f:
-                json.dump(json_coretweet, f, indent=4)
+            if rank == 0:
+                if not json_coretweet: 
+                    if not retweets:
+                        retweets = create_retweet_json(tweets)
+                    json_coretweet = generate_json_coretweet(retweets)
+                
+                with open('corrtwp.json', 'w') as f:
+                    json.dump(json_coretweet, f, indent=4)
     
     tf = time.time()
     
