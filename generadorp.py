@@ -45,6 +45,7 @@ def process_bz2_file(file_path, start_date, end_date, hashtags, tweets):
                 print(f"Error processing tweet: {e}")
 
 def process_tweets(input_directory: str, start_date, end_date, hashtags: list) -> list:
+    allTweetsFiles = []
     if rank == 0:
         if input_directory.endswith('.bz2'):
             tweets = []
@@ -53,12 +54,9 @@ def process_tweets(input_directory: str, start_date, end_date, hashtags: list) -
         else:
             #Si se pasa un directorio
             allFiles = list(glob.iglob(f"{input_directory}/**/*.json.bz2", recursive=True))
-            print(allFiles)
-            print(allFiles.count)
             len_allFiles = len(allFiles)
             numFilesProcess = len_allFiles // numProcess
             remainder = len_allFiles % numProcess
-            allTweetsFiles = []
             for process in range(numProcess):
                 start = process * numFilesProcess + min(process, remainder)
                 end = start + numFilesProcess + (1 if process < remainder else 0)
@@ -68,10 +66,9 @@ def process_tweets(input_directory: str, start_date, end_date, hashtags: list) -
 
     #Para mandar los tweets a los procesos (incluido root)
     tweetfiles = comm.scatter(allTweetsFiles, root=0)
-    
+
     tweets = []
     for archivo in tweetfiles:
-        print(f'Process {rank}:', archivo)
         process_bz2_file(archivo, start_date, end_date, hashtags, tweets)
     
     allTweets = comm.gather(tweets, root=0)
@@ -80,7 +77,6 @@ def process_tweets(input_directory: str, start_date, end_date, hashtags: list) -
         tweets = []
         for tweet in allTweets:
             tweets.extend(tweet)
-            print("tweets procesados count:", tweets.count)
         return tweets
     
     return None
@@ -101,8 +97,7 @@ def generate_minigraph_rt(tweets: list):
 
 def generate_graph_rt(tweets: list):
     
-    subgraph = generate_minigraph_rt(tweets[rank])
-    
+    subgraph = generate_minigraph_rt(tweets)
     allSubgraphs = comm.gather(subgraph, root=0)
     
     # Combinar subgrafos
@@ -113,34 +108,6 @@ def generate_graph_rt(tweets: list):
         nx.write_gexf(G, 'rtp.gexf')
         return G
     return None
-
-def create_retweet_json(tweets: list):
-    retweets = {}
-    for tweet in tweets:
-        retweeted_status = tweet.get('retweeted_status')
-        if retweeted_status:
-            retweeting_user = tweet["user"]["screen_name"]
-            retweeted_user = retweeted_status["user"]["screen_name"]
-            tweet_id = retweeted_status["id"]
-            tweet_id = f'tweetId: {tweet_id}'
-            if retweeted_user not in retweets:
-                retweets[retweeted_user] = {
-                    'receivedRetweets': 0,
-                    'tweets': {}
-                }
-
-            retweet_data = retweets[retweeted_user]
-            if tweet_id not in retweet_data['tweets']:
-                retweet_data['tweets'][tweet_id] = {'retweetedBy': [retweeting_user]}
-                retweet_data['receivedRetweets'] += 1
-            else:
-                retweet_data['tweets'][tweet_id]['retweetedBy'].append(retweeting_user)
-                retweet_data['receivedRetweets'] += 1
-            
-    sorted_retweets = sorted(retweets.items(), key=lambda x: x[1]['receivedRetweets'], reverse=True)
-    result = {"retweets": [{'username': key, **value} for key, value in sorted_retweets]}
-    
-    return result
 
 def create_retweet_minijson(tweets):
     retweets = {}
@@ -166,31 +133,28 @@ def create_retweet_minijson(tweets):
     
     return retweets
 
-
-def funcion(alltwts: list):
-    
-    subjson = create_retweet_minijson(alltwts[rank])
-    
+def create_retweet_json(tweets: list):
+    subjson = create_retweet_minijson(tweets)
     allSubjsons = comm.gather(subjson, root=0)
     
     if rank == 0:
-            combined_retweets = {}
-            for partial in allSubjsons:
-                for user, data in partial.items():
-                    if user not in combined_retweets:
-                        combined_retweets[user] = data
-                    else:
-                        combined_retweets[user]['receivedRetweets'] += data['receivedRetweets']
-                        for tweet_id, tweet_data in data['tweets'].items():
-                            if tweet_id not in combined_retweets[user]['tweets']:
-                                combined_retweets[user]['tweets'][tweet_id] = tweet_data
-                            else:
-                                combined_retweets[user]['tweets'][tweet_id]['retweetedBy'].extend(tweet_data['retweetedBy'])
+        combined_retweets = {}
+        for partial in allSubjsons:
+            for user, data in partial.items():
+                if user not in combined_retweets:
+                    combined_retweets[user] = data
+                else:
+                    combined_retweets[user]['receivedRetweets'] += data['receivedRetweets']
+                    for tweet_id, tweet_data in data['tweets'].items():
+                        if tweet_id not in combined_retweets[user]['tweets']:
+                            combined_retweets[user]['tweets'][tweet_id] = tweet_data
+                        else:
+                            combined_retweets[user]['tweets'][tweet_id]['retweetedBy'].extend(tweet_data['retweetedBy'])
 
-            sorted_retweets = sorted(combined_retweets.items(), key=lambda x: x[1]['receivedRetweets'], reverse=True)
-            result = {"retweets": [{'username': key, **value} for key, value in sorted_retweets]}
-            return result
-
+        sorted_retweets = sorted(combined_retweets.items(), key=lambda x: x[1]['receivedRetweets'], reverse=True)
+        result = {"retweets": [{'username': key, **value} for key, value in sorted_retweets]}
+        return result
+    
     return None
 
 def generate_minigraph_mention(tweets: list):
@@ -205,7 +169,7 @@ def generate_minigraph_mention(tweets: list):
     return G
 
 def generate_graph_mention(tweets: list):
-    subgraph = generate_minigraph_mention(tweets[rank])
+    subgraph = generate_minigraph_mention(tweets)
     
     allSubgraphs = comm.gather(subgraph, root=0)
     
@@ -219,9 +183,8 @@ def generate_graph_mention(tweets: list):
 
     return None
 
-def generate_json_mention(tweets: list):
-    mentions_dict = defaultdict(lambda: OrderedDict([('username', ''), ('receivedMentions', 0), ('mentions', [])]))
-
+def generate_minijson_mention(tweets: list):
+    mentions_dict = {}
     for tweet in tweets:
         if 'entities' in tweet and 'user_mentions' in tweet['entities'] and not tweet.get('retweeted_status'):
             mentioning_user = tweet['user']['screen_name']
@@ -230,21 +193,47 @@ def generate_json_mention(tweets: list):
             for user_mention in tweet['entities']['user_mentions']:
                 mentioned_user = user_mention['screen_name']
                 mention_data = {'mentionBy': mentioning_user, 'tweets': [tweet_id]}
-                flag = True
+
+                if mentioned_user not in mentions_dict:
+                    mentions_dict[mentioned_user] = {
+                        'username': mentioned_user,
+                        'receivedMentions': 0,
+                        'mentions': []
+                    }
+
                 mentions_dict[mentioned_user]['receivedMentions'] += 1
+                flag = True
                 for mention_m in mentions_dict[mentioned_user]['mentions']:
                     if mention_m['mentionBy'] == mentioning_user:
                         mention_m['tweets'].append(tweet_id)
                         flag = False
                         break
-                if flag: mentions_dict[mentioned_user]['mentions'].append(mention_data)
-                mentions_dict[mentioned_user]['username'] = mentioned_user
 
-    # Organizar la lista de menciones por 'receivedMentions' de mayor a menor
-    sorted_mentions = {'mentions':sorted(mentions_dict.values(), key=lambda x: x['receivedMentions'], reverse=True)}
+                if flag:
+                    mentions_dict[mentioned_user]['mentions'].append(mention_data)
 
-    with open('menciónp.json', 'w') as f:
-        json.dump(sorted_mentions, f, indent=4)
+    return mentions_dict
+
+def generate_json_mention(tweets: list):
+    subMentions = generate_minijson_mention(tweets)
+    allMentions = comm.gather(subMentions, root=0)
+    
+    if rank == 0:
+        # Combina los resultados finales de todos los procesos
+        merged_mentions_dict = defaultdict(lambda: OrderedDict([('username', ''), ('receivedMentions', 0), ('mentions', [])]))
+        
+        for mentions_dict in allMentions:
+            for mentioned_user, data in mentions_dict.items():
+                merged_mentions_dict[mentioned_user]['receivedMentions'] += data['receivedMentions']
+                merged_mentions_dict[mentioned_user]['username'] = mentioned_user
+                merged_mentions_dict[mentioned_user]['mentions'].extend(data['mentions'])
+
+        # Organizar la lista de menciones por 'receivedMentions' de mayor a menor
+        sorted_mentions = {'mentions': sorted(merged_mentions_dict.values(), key=lambda x: x['receivedMentions'], reverse=True)}
+        
+        # Guardar el resultado en un archivo JSON
+        with open('menciónp.json', 'w') as f:
+            json.dump(sorted_mentions, f, indent=4)
 
 def generate_graph_corretweet(tweetsjson: list, graph):
     G = nx.DiGraph()
@@ -263,7 +252,7 @@ def generate_graph_corretweet(tweetsjson: list, graph):
     return G
 
 def generate_graph_corretweet(tweets:list):
-    subgraph = generate_minigraph_mention(tweets[rank])
+    subgraph = generate_minigraph_mention(tweets)
     
     allSubgraphs = comm.gather(subgraph, root=0)
     
@@ -273,7 +262,6 @@ def generate_graph_corretweet(tweets:list):
             G = nx.compose(G, sg)
         nx.write_gexf(G, 'corrtwp.gexf')
         return G
-
 
 def generate_json_coretweet(tweets: list):
     json_co = {}
@@ -379,7 +367,7 @@ def dividir_lista(tweets:list , numProcess: int) -> list:
 
 def main(argv):
     ti = time.time()
-    input_directory = 'input/2016/01/01/01/01.json.bz2'
+    input_directory = 'input/2016/01/01/01'
     start_date = False
     end_date = False
     hashtags = []
@@ -413,42 +401,51 @@ def main(argv):
             with open(arg, 'r') as file:
                 hashtags = [line.strip() for line in file]
     
+    list_of_tweets = []
+    tweets = process_tweets(input_directory, start_date, end_date, hashtags)
     if rank == 0:
-        tweets = process_tweets(input_directory, start_date, end_date, hashtags)
         list_of_tweets = dividir_lista(tweets, numProcess)
-        for opt, arg in opts:
-            if opt == '--grt' or opt == '-grt':
-                G = generate_graph_rt(list_of_tweets)
-                nx.write_gexf(G, 'rtp.gexf')
-            if opt == '--jrt' or opt == '-jrt':
+    else:
+        list_of_tweets = None
+    
+    
+    # Distribuir los datos a todos los procesos
+    tweets = comm.scatter(list_of_tweets, root=0)
+    
+    for opt, arg in opts:
+        if opt == '--grt' or opt == '-grt':
+            G = generate_minigraph_rt(tweets)
+            G = generate_graph_rt(tweets)
+        
+        if opt == '--jrt' or opt == '-jrt':
+            if not retweets:
+                retweets = create_retweet_json(tweets)
+            with open('rtp.json', 'w') as f:
+                json.dump(retweets, f, indent=4)
+        
+        if opt == '--gm' or opt == '-gm':
+            generate_graph_mention(tweets)
+        
+        if opt == '--jm' or opt == '-jm':
+            generate_json_mention(tweets)
+        
+        if opt == '--gcrt' or opt == '-gcrt':
+            if not json_coretweet:
                 if not retweets:
-                    retweets = funcion(list_of_tweets)
-                with open('rtp.json', 'w') as f:
-                    json.dump(retweets, f, indent=4)
+                    retweets = create_retweet_json(tweets)
+                json_coretweet = generate_json_coretweet2(retweets)
             
-            if opt == '--gm' or opt == '-gm':
-                generate_graph_mention(list_of_tweets)
+            json_coretweet = json
+            generate_graph_corretweet(json_coretweet)
+        
+        if opt == '--jcrt' or opt == '-jcrt':
+            if not json_coretweet: 
+                if not retweets:
+                    retweets = create_retweet_json(tweets)
+                json_coretweet = generate_json_coretweet(retweets)
             
-            if opt == '--jm' or opt == '-jm':
-                generate_json_mention(tweets)
-            
-            if opt == '--gcrt' or opt == '-gcrt':
-                if not json_coretweet:
-                    if not retweets:
-                        retweets = create_retweet_json(tweets)
-                    json_coretweet = generate_json_coretweet2(retweets)
-                
-                json_coretweet = json
-                generate_graph_corretweet(json_coretweet)
-            
-            if opt == '--jcrt' or opt == '-jcrt':
-                if not json_coretweet: 
-                    if not retweets:
-                        retweets = create_retweet_json(tweets)
-                    json_coretweet = generate_json_coretweet(retweets)
-                
-                with open('corrtwp.json', 'w') as f:
-                    json.dump(json_coretweet, f, indent=4)
+            with open('corrtwp.json', 'w') as f:
+                json.dump(json_coretweet, f, indent=4)
     
     tf = time.time()
     
@@ -456,5 +453,4 @@ def main(argv):
         print(tf - ti)
 
 if __name__ == "__main__":
-    if rank == 0:
-        main(sys.argv[1:])
+    main(sys.argv[1:])
