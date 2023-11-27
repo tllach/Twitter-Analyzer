@@ -319,7 +319,7 @@ def dividir_lista(tweets:list, numProcess: int) -> list:
 
 def main(argv):
     ti = time.time()
-    input_directory = 'input/2016/01/01/01'
+    input_directory = 'input/'
     start_date = False
     end_date = False
     hashtags = []
